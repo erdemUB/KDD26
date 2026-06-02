@@ -7,9 +7,9 @@ Our implementation builds directly on the official GraphRAG benchmarking framewo
 
 ## Code Base and Attribution
 
-The code follows the same setup and execution procedure as the original GraphRAG benchmarking repository:
+The code follows the same setup and execution procedure as the original GraphRAG benchmarking repository [based on GraphRAG release v2.7.0.]:
 
-https://github.com/microsoft/graphrag-benchmarking-datasets
+https://github.com/microsoft/graphrag-benchmarking-datasets 
 
 We retain:
 - The same dataset format  
