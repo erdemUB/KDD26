@@ -52,6 +52,10 @@ def run_global_search(
         optional_list=[],
     )
 
+    community_level = _resolve_community_level(
+        community_level, dataframe_dict["communities"]
+    )
+
     # Call the Multi-Index Global Search API
     if dataframe_dict["multi-index"]:
         final_entities_list = dataframe_dict["entities"]
@@ -166,6 +170,10 @@ def run_local_search(
             "covariates",
         ],
     )
+    community_level = _resolve_community_level(
+        community_level, dataframe_dict["communities"]
+    )
+
     # Call the Multi-Index Local Search API
     if dataframe_dict["multi-index"]:
         final_entities_list = dataframe_dict["entities"]
@@ -294,6 +302,10 @@ def run_drift_search(
             "relationships",
             "entities",
         ],
+    )
+
+    community_level = _resolve_community_level(
+        community_level, dataframe_dict["communities"]
     )
 
     # Call the Multi-Index Drift Search API
@@ -472,6 +484,18 @@ def run_basic_search(
     print(response)
 
     return response, context_data
+
+
+def _resolve_community_level(community_level: Any, communities: Any) -> int | None:
+    """Resolve 'LF' (leaf level) and 'L1' (level above leaf) to integer levels."""
+    if community_level is None:
+        return None
+    level = str(community_level).strip().upper()
+    if level in ("LF", "L1"):
+        frames = communities if isinstance(communities, list) else [communities]
+        leaf_level = max(int(df["level"].max()) for df in frames)
+        return leaf_level if level == "LF" else max(leaf_level - 1, 0)
+    return int(level)
 
 
 def _resolve_output_files(

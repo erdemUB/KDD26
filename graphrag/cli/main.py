@@ -468,12 +468,13 @@ def _query_cli(
         resolve_path=True,
         autocompletion=ROOT_AUTOCOMPLETE,
     ),
-    community_level: int = typer.Option(
-        2,
+    community_level: str = typer.Option(
+        "2",
         "--community-level",
         help=(
-            "Leiden hierarchy level from which to load community reports. "
-            "Higher values represent smaller communities."
+            "Hierarchy level from which to load community reports. "
+            "Higher values represent smaller communities. "
+            "Use 'LF' for the leaf level or 'L1' for the level immediately above the leaf."
         ),
     ),
     dynamic_community_selection: bool = typer.Option(

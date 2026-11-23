@@ -54,6 +54,14 @@ async def run_workflow(
     ):
         claims = await load_table_from_storage("covariates", context.output_storage)
 
+    if config.community_reports.rrtc_budget is not None:
+        # RRTC: drop the unselected edges of the leaf-level communities.
+        from graphrag.index.operations.rrtc import rrtc_select
+
+        leaf_edges = set(rrtc_select(communities, edges, 1.0)["id"])
+        kept = set(rrtc_select(communities, edges, config.community_reports.rrtc_budget)["id"])
+        edges = edges[~edges["id"].isin(leaf_edges - kept)].reset_index(drop=True)
+
     community_reports_llm_settings = config.get_language_model_config(
         config.community_reports.model_id
     )

@@ -84,6 +84,9 @@ def create_communities(
             graph,
             use_lcc, cluster_type
         )
+    else:
+        msg = f"Unknown community algorithm '{cluster_type}'. Use one of: leiden, RkH, M2hC, MRC."
+        raise ValueError(msg)
 
 
     communities = pd.DataFrame(

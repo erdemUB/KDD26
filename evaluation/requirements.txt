@@ -1,0 +1,3 @@
+# In addition to the main package (pip install -e .):
+google-genai
+google-auth

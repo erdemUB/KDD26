@@ -1,4 +1,3 @@
-from pickle import TRUE
 import networkx as nx
 import logging
 from itertools import combinations
@@ -9,13 +8,6 @@ from graphrag.index.utils.stable_lcc import stable_largest_connected_component
 Communities = List[Tuple[int, int, int, list[str]]]
 
 logger = logging.getLogger(__name__)
-
-from graspologic.partition import leiden
-from collections import defaultdict, deque
-import networkx as nx
-import matplotlib.pyplot as plt
-import networkx as nx
-import plotly.graph_objects as go
 
 def split_connected_chunks(G, nodes, max_size=20):
     nodes = set(nodes)
@@ -31,7 +23,7 @@ def split_connected_chunks(G, nodes, max_size=20):
 
     while nodes:
         # 1. pick densest seed
-        seed = max(nodes, key=lambda x: (deg.get(x, 0), hash(x)))
+        seed = max(nodes, key=lambda x: (deg.get(x, 0), str(x)))  # deterministic tie-break
         S = {seed}
         frontier = set(subG.neighbors(seed)) & nodes
 
@@ -65,7 +57,7 @@ def split_connected_chunks(G, nodes, max_size=20):
             singleton_list.extend(list(S))
         else:
             # print(len(list(S)))
-            chunks.append(list(S)) 
+            chunks.append(sorted(S, key=str))
         nodes -= S
             
 
@@ -73,7 +65,7 @@ def split_connected_chunks(G, nodes, max_size=20):
         neighbor_chunks = {node2chunk[v] for v in subG.neighbors(s) if v in node2chunk}
         if neighbor_chunks:
             # assign to first neighbor chunk (could also merge multiple if needed)
-            target_chunk_id = list(neighbor_chunks)[0]
+            target_chunk_id = min(neighbor_chunks)
             chunks[target_chunk_id].append(s)   # <-- update the chunks list
             node2chunk[s] = target_chunk_id
     return chunks
@@ -96,7 +88,7 @@ def split_2hop_connected_chunks(G, nodes, anchor_nodes, max_size=20):
 
     while nodes:
         # 1) pick seed with max anchor coverage
-        seed = max(nodes, key=lambda u: (len(A[u]), hash(u)))
+        seed = max(nodes, key=lambda u: (len(A[u]), str(u)))  # deterministic tie-break
         S = {seed}
 
         # frontier: nodes sharing at least one anchor with seed
@@ -106,7 +98,7 @@ def split_2hop_connected_chunks(G, nodes, anchor_nodes, max_size=20):
         while len(S) < max_size and frontier:
             best_node, best_gain = None, -1
 
-            for v in frontier:
+            for v in sorted(frontier, key=str):
                 gain = sum(len(A[v] & A[u]) for u in S)
                 if gain > best_gain:
                     best_gain = gain
@@ -141,7 +133,7 @@ def assign_small_singletons_to_clusters(G, clusters, singletons, node2cluster):
     cluster_id_counter = max(cid for _, cid, _, _ in clusters)
     updated_clusters = clusters.copy()
 
-    unassigned = {tuple(c) for c in singletons}
+    unassigned = {tuple(sorted(c, key=str)) for c in singletons}
     left_out_nodes = []
 
     def cluster_neighbors(cluster):
@@ -157,11 +149,11 @@ def assign_small_singletons_to_clusters(G, clusters, singletons, node2cluster):
         )
 
     while unassigned:
-        small_cluster = max(unassigned, key=compute_score)
+        small_cluster = max(sorted(unassigned), key=compute_score)
 
         # ---- Count neighbors per cluster ----
         neighbor_counts = defaultdict(int)
-        for neighbor in cluster_neighbors(small_cluster):
+        for neighbor in sorted(cluster_neighbors(small_cluster), key=str):
             if neighbor in node2cluster:
                 neighbor_counts[node2cluster[neighbor]] += 1
 
@@ -227,6 +219,9 @@ def kcore_cluster_graph(graph: nx.Graph, use_lcc: bool = True, cluster_type="RkH
     cluster_queue = deque()
     cluster_queue.append((1, -1, list(copy_graph.nodes()), 0))
 
+    # M (max cluster size) = report budget (community_reports.max_length = 2000) / avg report tokens per node
+    # (~100-126 here) ~= 15-20. Fixed at 20 here because: report tokens are unknown before clustering,
+    # and a fixed M keeps results reproducible.
     MAX_CLUSTER_SIZE, MIN_CLUSTER_SIZE = 20, 1
     
     if cluster_type in {"M2hC", "MRC"}:
@@ -251,6 +246,7 @@ def kcore_cluster_graph(graph: nx.Graph, use_lcc: bool = True, cluster_type="RkH
         two_hop_sizes = []
         for i in range(q_size):
             cluster_id, parent_id, cur_nodes, is_res = cluster_queue.popleft()
+            singletons_nodes = []
 
             nodes_in_level = [n for n in cur_nodes if core_numbers[n] >= level]
             cur_res_nodes = [n for n in cur_nodes if core_numbers[n] < level]
@@ -260,8 +256,8 @@ def kcore_cluster_graph(graph: nx.Graph, use_lcc: bool = True, cluster_type="RkH
             # Create a subgraph for this k-core level nodes
             nodes_in_level_clusters = []
             subgraph = copy_graph.subgraph(nodes_in_level)
-            for component in nx.connected_components(subgraph):
-                child_nodes = list(component)
+            for component in sorted(nx.connected_components(subgraph), key=lambda c: min(map(str, c))):
+                child_nodes = sorted(component, key=str)
                 if level < max(levels) or len(child_nodes) <= MAX_CLUSTER_SIZE:
                     cluster_id_counter += 1; nodes_in_level_clusters.append(len(child_nodes))
                     clusters.append((level, cluster_id_counter, cluster_id, child_nodes))
@@ -279,8 +275,8 @@ def kcore_cluster_graph(graph: nx.Graph, use_lcc: bool = True, cluster_type="RkH
             res_nodes_clusters = []
             shell_subgraph = copy_graph.subgraph(cur_res_nodes)
             # Find connected components within the level-1
-            for component in nx.connected_components(shell_subgraph):
-                nodes = list(component)
+            for component in sorted(nx.connected_components(shell_subgraph), key=lambda c: min(map(str, c))):
+                nodes = sorted(component, key=str)
                 if len(nodes) == 1: 
                     singletons += 1; singletons_nodes.extend(nodes)
                 elif cluster_type in {"RkH"}:
@@ -308,10 +304,8 @@ def kcore_cluster_graph(graph: nx.Graph, use_lcc: bool = True, cluster_type="RkH
                         clusters.append((level, cluster_id_counter, cluster_id, nodes))  
                         node2cluster.update({n: cluster_id_counter for n in nodes})
                     elif len(nodes) > MAX_CLUSTER_SIZE:
-                        PRINT_SINGLETON = 0
                         subclusters = split_connected_chunks(copy_graph, nodes, max_size=MAX_CLUSTER_SIZE)
                         for sub_nodes in subclusters:
-                            PRINT_SINGLETON += 1 if len(sub_nodes) == 1 else 0
                             if len(sub_nodes) < MIN_RES_CC_SIZE:
                                 singletons += 1; singletons_nodes.extend(sub_nodes)
                                 continue
@@ -353,7 +347,6 @@ def kcore_cluster_graph(graph: nx.Graph, use_lcc: bool = True, cluster_type="RkH
                     else:
                         subclusters = split_2hop_connected_chunks(copy_graph, cur_subgraphs, medium_nodes, max_size=MAX_CLUSTER_SIZE)
                         for sub_nodes in subclusters:
-                            PRINT_SINGLETON += 1 if len(sub_nodes) == 1 else 0
                             if len(sub_nodes) == 1:
                                 actual_singleton.append(sub_nodes)
                                 continue
@@ -370,7 +363,6 @@ def kcore_cluster_graph(graph: nx.Graph, use_lcc: bool = True, cluster_type="RkH
                     elif len(cur_subgraphs) > MAX_CLUSTER_SIZE:
                         subclusters = split_2hop_connected_chunks(copy_graph, cur_subgraphs, medium_nodes, max_size=MAX_CLUSTER_SIZE)
                         for sub_nodes in subclusters:
-                            PRINT_SINGLETON += 1 if len(sub_nodes) == 1 else 0
                             if len(sub_nodes) < MIN_CLUSTER_SIZE:
                                 actual_singleton.append(sub_nodes)
                                 continue

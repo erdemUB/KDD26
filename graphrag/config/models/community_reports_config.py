@@ -34,6 +34,10 @@ class CommunityReportsConfig(BaseModel):
         description="The maximum input length in tokens to use when generating reports.",
         default=graphrag_config_defaults.community_reports.max_input_length,
     )
+    rrtc_budget: float | None = Field(
+        description="RRTC edge budget (e.g. 0.8): keep this fraction of the edges of the leaf-level communities when generating reports. None disables RRTC.",
+        default=graphrag_config_defaults.community_reports.rrtc_budget,
+    )
     strategy: dict | None = Field(
         description="The override strategy to use.",
         default=graphrag_config_defaults.community_reports.strategy,
