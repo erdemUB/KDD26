@@ -140,7 +140,7 @@ def assign_small_singletons_to_clusters(G, clusters, singletons, node2cluster):
         nbrs = set()
         for u in cluster:
             nbrs.update(G.neighbors(u))
-        return nbrs
+        return nbrs - set(cluster)
 
     def compute_score(cluster):
         return sum(
@@ -153,21 +153,27 @@ def assign_small_singletons_to_clusters(G, clusters, singletons, node2cluster):
 
         # ---- Count neighbors per cluster ----
         neighbor_counts = defaultdict(int)
+        members = {cid: set(nodes) for _, cid, _, nodes in updated_clusters}
         for neighbor in sorted(cluster_neighbors(small_cluster), key=str):
             if neighbor in node2cluster:
-                neighbor_counts[node2cluster[neighbor]] += 1
+                cid = node2cluster[neighbor]
+                if members[cid].isdisjoint(small_cluster):  # skip ancestors that already contain these nodes
+                    neighbor_counts[cid] += 1
 
         if neighbor_counts:
             best_cluster_id = max(
                 neighbor_counts.items(), key=lambda x: x[1]
             )[0]
 
-            for idx, (lvl, cid, pid, nodes) in enumerate(updated_clusters):
-                if cid == best_cluster_id:
-                    updated_clusters[idx] = (
-                        lvl, cid, pid, nodes + list(small_cluster)  
-                    )
-                    break
+            # add the pair to the chosen cluster and to every ancestor that lacks it (keeps the tree nested)
+            index = {cid: idx for idx, (_, cid, _, _) in enumerate(updated_clusters)}
+            target = best_cluster_id
+            while target in index:
+                lvl, cid, pid, nodes = updated_clusters[index[target]]
+                missing = [u for u in small_cluster if u not in nodes]
+                if missing:
+                    updated_clusters[index[target]] = (lvl, cid, pid, nodes + missing)
+                target = pid
 
             for u in small_cluster:
                 node2cluster[u] = best_cluster_id
